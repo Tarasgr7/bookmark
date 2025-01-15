@@ -1,58 +1,72 @@
-from flask import Flask,redirect,jsonify
-import os 
+from flask import Flask, redirect, jsonify
+import os
 from src.auth import auth
 from src.bookmarks import bookmarks
-from src.database import db,Bookmark
 from flask_jwt_extended import JWTManager
 from src.constans.http_status_code import *
-from flasgger import Swagger,swag_from
-from src.config.swagger import swagger_config,template
+from flasgger import Swagger, swag_from
+from src.config.swagger import swagger_config, template
 from dotenv import load_dotenv
+from src.database import mongo
 
 def create_app(test_config=None):
-  app=Flask(__name__,instance_relative_config=True)
-  load_dotenv()
-  if test_config is  None:
-    app.config.from_mapping(
-      SECRET_KEY=os.environ.get("SECRET_KEY"),
-      SQLALCHEMY_DATABASE_URI=os.environ.get("SQLALCHEMY_DB_URI"),
-      SQLALCHEMY_TRACK_MODIFICATIONS=False,
-      JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY'),
+    app = Flask(__name__, instance_relative_config=True)
+    load_dotenv()
+    
+    if test_config is None:
+        app.config.from_mapping(
+            SECRET_KEY=os.environ.get("SECRET_KEY"),
+            MONGO_URI=os.environ.get("MONGO_URI"),  # Замініть URI MongoDB
+            JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY'),
 
-      SWAGGER={
+            SWAGGER={
                 'title': "Bookmarks API",
                 'uiversion': 3
             }
-    )
-  else:
-    app.config.from_mapping(test_config)
+        )
+    else:
+        app.config.from_mapping(test_config)
 
-  
-  db.app=app
-  db.init_app(app)
-  app.register_blueprint(auth)
-  app.register_blueprint(bookmarks)
-  JWTManager(app)
+    # Ініціалізація MongoDB
+    mongo.init_app(app)
+    try:
+      mongo.cx.server_info()  # Перевірка підключення
+    except Exception as e:
+      print(f"Помилка підключення до MongoDB: {e}")
+    
+    # Реєстрація blueprints
+    app.register_blueprint(auth)
+    app.register_blueprint(bookmarks)
+    
+    # JWT менеджер
+    JWTManager(app)
 
-  Swagger(app, config=swagger_config, template=template)
+    # Swagger документація
+    Swagger(app, config=swagger_config, template=template)
 
+    @app.get("/<short_url>")
+    @swag_from('./docs/short_url.yaml')
+    def redirect_to_url(short_url):
+        bookmark = mongo.db.bookmarks.find_one({"short_url": short_url})
+        
+        if not bookmark:
+            return jsonify({'error': 'Not found'}), HTTP_404_NOT_FOUND
 
-  @app.get("/<short_url>")
-  @swag_from('./docs/short_url.yaml')
-  def redirect_to_url(short_url):
-    bookmark=Bookmark.query.filter_by(short_url=short_url).first_or_404()
+        # Збільшуємо лічильник відвідувань
+        mongo.db.bookmarks.update_one(
+            {"short_url": short_url},
+            {"$inc": {"visits": 1}}
+        )
+        return redirect(bookmark['url'])
 
-    if bookmark:
-      bookmark.visits+=1
-      db.session.commit()
-      return redirect(bookmark.url)
+    @app.errorhandler(HTTP_404_NOT_FOUND)
+    def handle_404(e):
+        return jsonify({'error': 'Not found'}), HTTP_404_NOT_FOUND
 
-  @app.errorhandler(HTTP_404_NOT_FOUND)
-  def handle_404(e):
-      return jsonify({'error': 'Not found'}), HTTP_404_NOT_FOUND
+    @app.errorhandler(HTTP_500_INTERNAL_SERVER_ERROR)
+    def handle_500(e):
+        return jsonify({'error': 'Something went wrong, we are working on it'}), HTTP_500_INTERNAL_SERVER_ERROR
+    print("MongoDB client:", mongo)
+    
 
-  @app.errorhandler(HTTP_500_INTERNAL_SERVER_ERROR)
-  def handle_500(e):
-    return jsonify({'error': 'Something went wrong, we are working on it'}), HTTP_500_INTERNAL_SERVER_ERROR
-
-  return app
+    return app
