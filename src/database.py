@@ -1,51 +1,83 @@
-from flask_sqlalchemy import SQLAlchemy
+from flask_pymongo import PyMongo
 from datetime import datetime
 import string
 import random
-db=SQLAlchemy()
 
+mongo = PyMongo()
 
+# Користувач
+class User:
+    def __init__(self, username, email, password):
+        self.username = username
+        self.email = email
+        self.password = password
+        self.created_at = datetime.utcnow()
+        self.updated_at = None
 
-class User(db.Model):
-  id=db.Column(db.Integer,primary_key=True)
-  username=db.Column(db.String(80),unique=True,nullable=False)
-  email=db.Column(db.String(120),unique=True,nullable=False)
-  password=db.Column(db.Text,nullable=False)
-  cerated_at=db.Column(db.DateTime, default=datetime.now())
-  updated_at=db.Column(db.DateTime, onupdate=datetime.now())
-  bookmarks=db.relationship('Bookmark', backref='user', lazy=True)
+    def save(self):
+        user_data = {
+            "username": self.username,
+            "email": self.email,
+            "password": self.password,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+        return mongo.db.users.insert_one(user_data)
 
-  def __repr__(self):
-    return f"<User('{self.username}', '{self.email}')>"
+    @staticmethod
+    def find_by_username(username):
+        return mongo.db.users.find_one({"username": username})
 
+    @staticmethod
+    def find_by_email(email):
+        return mongo.db.users.find_one({"email": email})
 
-class Bookmark(db.Model):
-  id=db.Column(db.Integer,primary_key=True)
-  body=db.Column(db.Text,nullable=False)
-  url=db.Column(db.Text,nullable=False)
-  short_url=db.Column(db.String(3),nullable=False)
-  visits=db.Column(db.Integer,default=0)
-  user_id=db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-  created_at=db.Column(db.DateTime, default=datetime.now())
-  updated_at=db.Column(db.DateTime, onupdate=datetime.now())
+    def __repr__(self):
+        return f"<User('{self.username}', '{self.email}')>"
 
-  def generate_short_characters(self):
-    characters=string.digits + string.ascii_lowercase
-    picked_chars=''.join(random.choices(characters,k=3))
+# Закладки
+class Bookmark:
+    def __init__(self, body, url, user_id):
+        self.body = body
+        self.url = url
+        self.short_url = self.generate_short_characters()
+        self.visits = 0
+        self.user_id = user_id
+        self.created_at = datetime.utcnow()
+        self.updated_at = None
 
-    link= self.query.filter_by(short_url=picked_chars).first()
+    def generate_short_characters(self):
+        characters = string.digits + string.ascii_lowercase
+        picked_chars = ''.join(random.choices(characters, k=3))
 
-    if link:
-      self.generate_short_characters()
-    else:
-      return picked_chars
+        # Перевірка, чи унікальний short_url
+        existing_link = mongo.db.bookmarks.find_one({"short_url": picked_chars})
+        if existing_link:
+            return self.generate_short_characters()
+        return picked_chars
 
+    def save(self):
+        bookmark_data = {
+            "body": self.body,
+            "url": self.url,
+            "short_url": self.short_url,
+            "visits": self.visits,
+            "user_id": self.user_id,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+        return mongo.db.bookmarks.insert_one(bookmark_data)
 
-  def __init__(self,**kwargs):
-    super().__init__(**kwargs)
-    self.short_url = self.generate_short_characters()
+    @staticmethod
+    def find_by_short_url(short_url):
+        return mongo.db.bookmarks.find_one({"short_url": short_url})
 
-  def __repr__(self):
-    return f"<Bookmark('{self.title}', '{self.url}')>"
-  
+    @staticmethod
+    def update_visits(short_url):
+        return mongo.db.bookmarks.update_one(
+            {"short_url": short_url},
+            {"$inc": {"visits": 1}}
+        )
 
+    def __repr__(self):
+        return f"<Bookmark('{self.body}', '{self.url}')>"
