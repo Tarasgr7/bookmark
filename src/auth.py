@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from src.constans.http_status_code import *
 import validators
-from src.database import mongo, User
+from src.database import mongo
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from flasgger import swag_from
 from bson.objectid import ObjectId

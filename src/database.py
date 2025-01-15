@@ -5,7 +5,6 @@ import random
 
 mongo = PyMongo()
 
-# Користувач
 class User:
     def __init__(self, username, email, password):
         self.username = username
@@ -35,7 +34,6 @@ class User:
     def __repr__(self):
         return f"<User('{self.username}', '{self.email}')>"
 
-# Закладки
 class Bookmark:
     def __init__(self, body, url, user_id):
         self.body = body
@@ -50,7 +48,7 @@ class Bookmark:
         characters = string.digits + string.ascii_lowercase
         picked_chars = ''.join(random.choices(characters, k=3))
 
-        # Перевірка, чи унікальний short_url
+
         existing_link = mongo.db.bookmarks.find_one({"short_url": picked_chars})
         if existing_link:
             return self.generate_short_characters()

@@ -3,7 +3,6 @@ from src.database import mongo
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.constans.http_status_code import *
 import validators
-from flasgger import swag_from
 from bson.objectid import ObjectId, InvalidId
 from datetime import datetime
 

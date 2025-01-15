@@ -16,7 +16,7 @@ def create_app(test_config=None):
     if test_config is None:
         app.config.from_mapping(
             SECRET_KEY=os.environ.get("SECRET_KEY"),
-            MONGO_URI=os.environ.get("MONGO_URI"),  # Замініть URI MongoDB
+            MONGO_URI=os.environ.get("MONGO_URI"),  
             JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY'),
 
             SWAGGER={
@@ -27,21 +27,17 @@ def create_app(test_config=None):
     else:
         app.config.from_mapping(test_config)
 
-    # Ініціалізація MongoDB
     mongo.init_app(app)
     try:
-      mongo.cx.server_info()  # Перевірка підключення
+      mongo.cx.server_info()  
     except Exception as e:
       print(f"Помилка підключення до MongoDB: {e}")
     
-    # Реєстрація blueprints
     app.register_blueprint(auth)
     app.register_blueprint(bookmarks)
     
-    # JWT менеджер
     JWTManager(app)
 
-    # Swagger документація
     Swagger(app, config=swagger_config, template=template)
 
     @app.get("/<short_url>")
@@ -52,7 +48,6 @@ def create_app(test_config=None):
         if not bookmark:
             return jsonify({'error': 'Not found'}), HTTP_404_NOT_FOUND
 
-        # Збільшуємо лічильник відвідувань
         mongo.db.bookmarks.update_one(
             {"short_url": short_url},
             {"$inc": {"visits": 1}}
